@@ -1,6 +1,19 @@
 ---
 output: html_document
 ---
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css"> 
+<!-- <style type="text/css"> -->
+<!-- @import url("http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"); -->
+<!-- </style> -->
+
+```{css, echo=FALSE}
+.nested-table {
+  padding: 10px;
+  background-color: blue;
+}
+```
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -14,117 +27,138 @@ library(readxl)
 library(tidyverse)
 
 schedule_df <- read_excel("data/RSE Workshop Applications V2 RS.xlsx", 
-                          sheet = "Schedule_v2", na = "") %>% 
+                          sheet = "Schedule_v2", na = c("", NA)) %>% 
   select(-ID, -Note, -Confirms) %>% 
   relocate(Title, .before=Author) %>% 
   mutate(
     Session = str_to_title(Session),
     Session = str_squish(Session), # Remove whitespaces
-    # Session = recode(Session,
-    #  "Focus Session 1" = "Focus Session",
-    #  "Focus Session 2" = "Focus Session",
-    #  "Focus Session 3" = "Focus Session"
-    # ),
-    Session = as.factor(Session)) %>% 
-  replace_na(list(Title = "",
-                  Author = "",
-                  Organisation = ""))
+    session_short = case_when(str_detect(Session, "Focus") ~ "Focus Session",
+                           str_detect(Session, "Post") ~ "Poster",
+                           str_detect(Session, "Walkthrough") ~ "Walkthrough",
+                           str_detect(Session, "Panel") ~ "Panel"),
+    session_short = coalesce(session_short, Session),
+    session_short = as.factor(session_short),
+    Room = case_when(!is.na(Room) ~ paste0("Room: <div class='badge badge-pill badge-info'>
+                  <i class='bi bi-geo-alt-fill'></i>", Room, "</div")),
+    title_tmp = case_when(!is.na(Title) ~ paste0("<b>", Title, "</b><br>")),
+    author_tmp = case_when(!is.na(Author) ~ paste0(Author, "<br>")),
+    organisation_tmp = case_when(!is.na(Organisation) ~ paste0("<i>", Organisation, "</i><br>")),
+    topic_tmp = case_when(
+      !is.na(Topic) ~ paste0("<br><small>",
+                            Topic, "</small>"))) %>% 
+   # topic_tmp = case_when(
+   #    !is.na(Topic) ~ paste0("<br><small><div class='w3-tag w3-round w3-deep-purple' style='padding:3px'>",
+   #                          Topic, "</div></small>"))) %>% 
+  unite(Info, title_tmp, author_tmp, organisation_tmp, Room, sep = "", remove = TRUE) %>% 
+  unite(session_room, Session, topic_tmp, sep = "", remove = FALSE, na.rm = TRUE) %>% 
+  mutate(Info = str_remove_all(Info, "NA")) 
 
 
-
-
+color_keynote <- "rgb(0, 123, 255)"
 color_panel <- "#008000"
 color_focus_session <- "#e00000"
 color_lightning <- "orange"
 
 
-
 # Table preparations ------------------------------------------------------
 
-# Nested information about sessions.
-row_details <- function(index) {
-  abstract <- shared_data$Abstract[index]
-  htmltools::div(class = "nested_table", abstract)
 
-}
 
 # Creating the table and filters.
-schedule <- function(shared_data) {
+schedule <- function(df, date) {
+  
+  df <- df %>% 
+    filter(Day == date) %>% 
+    mutate(session_short = as.character(session_short),
+           session_short = as.factor(session_short))
+    
+  # Nested information about sessions.
+  row_details <- function(index) {
+    abstract <- df$Abstract[index]
+    htmltools::div(class = "nested_table", abstract)
+  }
+  
+  
+  shared_data <- SharedData$new(df)
+  
+  # Render the filters and columns.
   bscols(
-  widths = c(2, NA),
-  list(
-    # filter_checkbox("Day", "Day", shared_data, ~Day),
-    filter_select("Session", "Session", shared_data, ~Session),
-    filter_select("Topic", "Topic", shared_data, ~Topic)
-  ),
+  widths = c(NA, 2),
   reactable(
-  shared_data,
-  height = 600,
-  searchable = TRUE,
-  bordered = TRUE,
-  # filterable = TRUE,
-  # groupBy = "Day",
-  # defaultExpanded = TRUE,
-  pagination = FALSE, 
-  highlight = TRUE,
-  defaultColDef = colDef(
-    minWidth = 70
-  ),
-  columns = list(
-    Day = colDef(show = FALSE),
-    Session = colDef(
-      style = function(value) {
-        if (value == "Panel") {
-          color <- color_panel
-        } else if (str_starts(value, "Focus")) {
-          color <- color_focus_session
-        } else if (value == "Lightning Talks") {
-          color <- color_lightning
-        } else {
-          color <- "#777"
+    shared_data,
+    # height = 600,
+    searchable = TRUE,
+    bordered = TRUE,
+    # filterable = TRUE,
+    # groupBy = "Day",
+    # defaultExpanded = TRUE,
+    # pagination = FALSE, 
+    defaultPageSize = 17,
+    highlight = TRUE,
+    defaultColDef = colDef(
+      minWidth = 70
+    ),
+    columns = list(
+      Day = colDef(show = FALSE),
+      session_room = colDef(
+        name = "Session",
+        minWidth = 100,
+        html = TRUE,
+        style = function(value) {
+          if (value == "Panel") {
+            color <- color_panel
+          } else if (str_starts(value, "Focus")) {
+            color <- color_focus_session
+          } else if (value == "Lightning Talks") {
+            color <- color_lightning
+          } else if (value == "Keynote") {
+            color <- color_keynote 
+          } else {
+            color <- "#777"
+          }
+          list(color = color, fontWeight = "bold")
         }
-        list(color = color, fontWeight = "bold")
-      }
+      ),
+      Room = colDef(show = FALSE),
+      Session = colDef(show = FALSE),
+      Info = colDef(
+        minWidth = 250, 
+        name = "Title & Author",
+        html = TRUE),
+      Topic = colDef(show = FALSE),
+      Title = colDef(show = FALSE),
+      Author = colDef(show = FALSE),
+      Organisation = colDef(show = FALSE),
+      Abstract = colDef(show = FALSE),
+      session_short = colDef(show = FALSE),
+      topic_tmp = colDef(show = FALSE)
+      ),
+    details = row_details
     ),
-    Title = colDef(
-      minWidth = 250, 
-      name = "Title & Author",
-      # Show author and affiliation under Title's info.
-      cell = function(value, index) {
-        author <- schedule_df$Author[index]
-        affiliation <- schedule_df$Organisation[index]
-        # species <- if (!is.na(species)) species else "Unknown"
-        div(
-          div(style = list(fontWeight = 600), value),
-          # div(style = list(fontSize = "0.75rem"), paste0(author, ", ", affiliation)),
-          div(author),
-          div(style = list(fontStyle ="italic"), affiliation)
-        )
-      }
-    ),
-    Author = colDef(show = FALSE),
-    Organisation = colDef(show = FALSE),
-    Abstract = colDef(show = FALSE)
-    ),
-  details = row_details
+    list(
+    # filter_checkbox("Day", "Day", shared_data, ~Day),
+    filter_select("Session", "Session", shared_data, ~session_short),
+    filter_select("Topic", "Topic", shared_data, ~Topic)
+    )
   )
-)
 }
 
 ```
 
-## Days {.tabset}
+```{css, echo=FALSE}
+.topic {
+  font-size: 32px;
+}
+```
+
+## Schedule {.tabset}
 
 ### Wednesday 15th
 
 ```{r echo=FALSE}
 
-shared_df_day1 <- schedule_df %>% 
-  filter(Day == "15/02/2023") %>% 
-  SharedData$new()
-
-
-schedule(shared_df_day1)
+schedule(schedule_df, "15/02/2023")
 
 ```
 
@@ -132,12 +166,7 @@ schedule(shared_df_day1)
 
 ```{r echo=FALSE}
 
-shared_df_day2 <- schedule_df %>% 
-  filter(Day == "16/02/2023") %>% 
-  SharedData$new()
-
-
-schedule(shared_df_day2)
+schedule(schedule_df, "16/02/2023")
 
 ```
 
@@ -145,11 +174,6 @@ schedule(shared_df_day2)
 
 ```{r echo=FALSE}
 
-shared_df_day3 <- schedule_df %>% 
-  filter(Day == "17/02/2023") %>% 
-  SharedData$new()
-
-
-schedule(shared_df_day3)
+schedule(schedule_df, "17/02/2023")
 
 ```

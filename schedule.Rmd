@@ -14,23 +14,23 @@ library(readxl)
 library(tidyverse)
 
 schedule_df <- read_excel("data/RSE Workshop Applications V2 RS.xlsx", 
-                          sheet = "Schedule", na = "") %>% 
+                          sheet = "Schedule_v2", na = "") %>% 
   select(-ID, -Note, -Confirms) %>% 
   relocate(Title, .before=Author) %>% 
   mutate(
     Session = str_to_title(Session),
     Session = str_squish(Session), # Remove whitespaces
-    Session = recode(Session,
-     "Focus Session 1" = "Focus Session",
-     "Focus Session 2" = "Focus Session",
-     "Focus Session 3" = "Focus Session"
-    ),
+    # Session = recode(Session,
+    #  "Focus Session 1" = "Focus Session",
+    #  "Focus Session 2" = "Focus Session",
+    #  "Focus Session 3" = "Focus Session"
+    # ),
     Session = as.factor(Session)) %>% 
   replace_na(list(Title = "",
                   Author = "",
                   Organisation = ""))
 
-shared_df <- SharedData$new(schedule_df)
+
 
 
 color_panel <- "#008000"
@@ -43,29 +43,22 @@ color_lightning <- "orange"
 
 # Nested information about sessions.
 row_details <- function(index) {
-  abstract <- schedule_df$Abstract[index]
+  abstract <- shared_data$Abstract[index]
   htmltools::div(class = "nested_table", abstract)
 
 }
 
-```
-
-## Days {.tabset}
-
-### Day 1
-
-```{r echo=FALSE}
-
-
-bscols(
+# Creating the table and filters.
+schedule <- function(shared_data) {
+  bscols(
   widths = c(2, NA),
   list(
-    filter_checkbox("Day", "Day", shared_df, ~Day),
-    filter_select("Session", "Session", shared_df, ~Session),
-    filter_select("Topic", "Topic", shared_df, ~Topic)
+    # filter_checkbox("Day", "Day", shared_data, ~Day),
+    filter_select("Session", "Session", shared_data, ~Session),
+    filter_select("Topic", "Topic", shared_data, ~Topic)
   ),
   reactable(
-  shared_df,
+  shared_data,
   height = 600,
   searchable = TRUE,
   bordered = TRUE,
@@ -116,12 +109,47 @@ bscols(
   details = row_details
   )
 )
-
-
-
-
+}
 
 ```
 
-### Day 2
+## Days {.tabset}
 
+### Wednesday 15th
+
+```{r echo=FALSE}
+
+shared_df_day1 <- schedule_df %>% 
+  filter(Day == "15/02/2023") %>% 
+  SharedData$new()
+
+
+schedule(shared_df_day1)
+
+```
+
+### Thursday 16th
+
+```{r echo=FALSE}
+
+shared_df_day2 <- schedule_df %>% 
+  filter(Day == "16/02/2023") %>% 
+  SharedData$new()
+
+
+schedule(shared_df_day2)
+
+```
+
+### Friday 17th
+
+```{r echo=FALSE}
+
+shared_df_day3 <- schedule_df %>% 
+  filter(Day == "17/02/2023") %>% 
+  SharedData$new()
+
+
+schedule(shared_df_day3)
+
+```
